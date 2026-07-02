@@ -55,6 +55,8 @@ npm run typecheck
 npm run build
 ```
 
+`next-env.d.ts` は Next.js が `dev` / `build` / `typecheck` 時に自動生成します。
+
 ## 生成ルール
 
 - 入力ヤードを基準にする
