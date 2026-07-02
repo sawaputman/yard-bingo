@@ -10,11 +10,6 @@ type Cell = {
 
 type Phase = "start" | "loading" | "game";
 
-type BingoResult = {
-  line: number[];
-  prize: string;
-} | null;
-
 const STORAGE_KEY = "yard-bingo-state";
 const CELL_COUNT = 9;
 const RANGE_MIN_RATIO = 0.7;
@@ -65,10 +60,6 @@ function generateTargets(baseYards: number) {
   return shuffle(values).slice(0, CELL_COUNT);
 }
 
-function isWithinHitRange(targetYards: number, actualYards: number) {
-  return Math.abs(targetYards - actualYards) <= HIT_RANGE;
-}
-
 function getPrize(line: number[]) {
   const horizontalIndex = BINGO_LINES.findIndex(
     (candidateLine) => candidateLine.join(",") === line.join(",")
@@ -80,6 +71,23 @@ function getPrize(line: number[]) {
   return "特別賞！";
 }
 
+function getLineLabel(line: number[]) {
+  const horizontalIndex = BINGO_LINES.findIndex(
+    (candidateLine) => candidateLine.join(",") === line.join(",")
+  );
+
+  if (horizontalIndex === 0) return "一列目";
+  if (horizontalIndex === 1) return "二列目";
+  if (horizontalIndex === 2) return "三列目";
+  return "";
+}
+
+function getBingoMessage(lineKey: string) {
+  const line = lineKey.split("-").map(Number);
+  const label = getLineLabel(line);
+  return label ? `${label}のビンゴ達成！${getPrize(line)}` : `ビンゴ達成！${getPrize(line)}`;
+}
+
 function findBingo(cells: Cell[], announcedLines: string[]) {
   const announced = new Set(announcedLines);
   const completedLine = BINGO_LINES.find((line) => {
@@ -89,10 +97,7 @@ function findBingo(cells: Cell[], announcedLines: string[]) {
 
   if (!completedLine) return null;
 
-  return {
-    line: completedLine,
-    prize: getPrize(completedLine)
-  };
+  return completedLine;
 }
 
 export default function Home() {
@@ -100,17 +105,17 @@ export default function Home() {
   const [baseYards, setBaseYards] = useState("");
   const [cells, setCells] = useState<Cell[]>([]);
   const [confirmCell, setConfirmCell] = useState<Cell | null>(null);
-  const [actualYards, setActualYards] = useState("");
-  const [bingo, setBingo] = useState<BingoResult>(null);
   const [announcedLines, setAnnouncedLines] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const [hitError, setHitError] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const clearedCount = useMemo(
     () => cells.filter((cell) => cell.cleared).length,
     [cells]
   );
+  const latestBingoMessage = announcedLines.at(-1)
+    ? getBingoMessage(announcedLines.at(-1) as string)
+    : "";
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -168,25 +173,12 @@ export default function Home() {
         }))
       );
       setAnnouncedLines([]);
-      setBingo(null);
       setPhase("game");
     }, 1000);
   };
 
   const clearCell = () => {
     if (!confirmCell) return;
-
-    const actual = Number(actualYards);
-
-    if (!Number.isFinite(actual) || actual <= 0) {
-      setHitError("実際に飛んだヤードを入力してください");
-      return;
-    }
-
-    if (!isWithinHitRange(confirmCell.yards, actual)) {
-      setHitError(`${confirmCell.yards - HIT_RANGE}〜${confirmCell.yards + HIT_RANGE}yd ならクリアです`);
-      return;
-    }
 
     const nextCells = cells.map((cell) =>
       cell.id === confirmCell.id ? { ...cell, cleared: true } : cell
@@ -195,12 +187,9 @@ export default function Home() {
 
     setCells(nextCells);
     setConfirmCell(null);
-    setActualYards("");
-    setHitError("");
 
     if (nextBingo) {
-      setAnnouncedLines((current) => [...current, nextBingo.line.join("-")]);
-      setBingo(nextBingo);
+      setAnnouncedLines((current) => [...current, nextBingo.join("-")]);
     }
   };
 
@@ -209,11 +198,8 @@ export default function Home() {
     setBaseYards("");
     setCells([]);
     setConfirmCell(null);
-    setActualYards("");
-    setBingo(null);
     setAnnouncedLines([]);
     setError("");
-    setHitError("");
     window.localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -224,8 +210,8 @@ export default function Home() {
       {phase === "start" && (
         <section className="screen start-screen">
           <div className="brand-badge">Driving Range Game</div>
-          <h1>ヤードビンゴ</h1>
-          <p className="lead">最初の1球を基準に、今日のねらい目を9マスで遊ぼう。</p>
+          <h1>ギャンブルゴルフ</h1>
+          <p className="lead">最初の1球を元にビンゴを作成するよ！</p>
 
           <form className="start-form" onSubmit={startGame}>
             <label htmlFor="base-yards">最初の球のヤード</label>
@@ -234,7 +220,7 @@ export default function Home() {
                 id="base-yards"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                placeholder="150"
+                placeholder="0"
                 value={baseYards}
                 onChange={(event) => setBaseYards(event.target.value.replace(/\D/g, ""))}
               />
@@ -277,59 +263,45 @@ export default function Home() {
                 onClick={() => {
                   if (cell.cleared) return;
                   setConfirmCell(cell);
-                  setActualYards("");
-                  setHitError("");
                 }}
                 aria-pressed={cell.cleared}
               >
                 <span className="cell-index">{index + 1}</span>
                 <strong>{cell.yards}</strong>
                 <span>yd</span>
+                <small>{cell.yards - HIT_RANGE}〜{cell.yards + HIT_RANGE}yd</small>
                 {cell.cleared && <b aria-hidden="true">✓</b>}
               </button>
             ))}
           </div>
 
-          <button className="secondary-button" type="button" onClick={resetGame}>
-            最初からやり直す
-          </button>
+          <div className="game-actions">
+            {latestBingoMessage && (
+              <div className="bingo-banner" role="status" aria-live="polite">
+                {latestBingoMessage}
+              </div>
+            )}
+
+            <button className="secondary-button" type="button" onClick={resetGame}>
+              最初からやり直す
+            </button>
+          </div>
         </section>
       )}
 
       {confirmCell && (
         <div className="modal-backdrop" role="presentation">
-          <form
+          <div
             className="dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            onSubmit={(event) => {
-              event.preventDefault();
-              clearCell();
-            }}
           >
             <p className="dialog-kicker">Nice shot?</p>
             <h3 id="confirm-title">このマスをクリアにしますか？</h3>
             <p className="target-yards">{confirmCell.yards} yd</p>
-            <label className="hit-input-label" htmlFor="actual-yards">
-              実際のヤード
-            </label>
-            <div className="hit-input-row">
-              <input
-                id="actual-yards"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder={`${confirmCell.yards}`}
-                value={actualYards}
-                onChange={(event) => {
-                  setActualYards(event.target.value.replace(/\D/g, ""));
-                  setHitError("");
-                }}
-              />
-              <span>yd</span>
-            </div>
-            <p className={`hit-range ${hitError ? "is-error" : ""}`}>
-              {hitError || `判定範囲: ${confirmCell.yards - HIT_RANGE}〜${confirmCell.yards + HIT_RANGE}yd`}
+            <p className="hit-range">
+              クリア範囲: {confirmCell.yards - HIT_RANGE}〜{confirmCell.yards + HIT_RANGE}yd
             </p>
             <div className="dialog-actions">
               <button
@@ -337,34 +309,14 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setConfirmCell(null);
-                  setActualYards("");
-                  setHitError("");
                 }}
               >
                 キャンセル
               </button>
-              <button className="confirm-button" type="submit">
+              <button className="confirm-button" type="button" onClick={clearCell}>
                 クリア
               </button>
             </div>
-          </form>
-        </div>
-      )}
-
-      {bingo && (
-        <div className="modal-backdrop celebration" role="presentation">
-          <div className="confetti" aria-hidden="true">
-            {Array.from({ length: 18 }).map((_, index) => (
-              <i key={index} />
-            ))}
-          </div>
-          <div className="dialog bingo-modal" role="dialog" aria-modal="true">
-            <p className="dialog-kicker">Perfect line</p>
-            <h3>BINGO!</h3>
-            <p className="prize-text">{bingo.prize}</p>
-            <button className="primary-button" type="button" onClick={resetGame}>
-              もう一度遊ぶ
-            </button>
           </div>
         </div>
       )}

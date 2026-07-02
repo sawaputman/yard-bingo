@@ -108,7 +108,7 @@ p {
 h1 {
   margin-top: 10px;
   color: #ffffff;
-  font-size: clamp(3.25rem, 18vw, 4.6rem);
+  font-size: clamp(2.6rem, 13vw, 3.7rem);
   font-weight: 950;
   line-height: 0.96;
   text-shadow: 0 5px 0 rgba(6, 55, 25, 0.24);
@@ -197,7 +197,6 @@ h1 {
 
 .secondary-button {
   width: 100%;
-  margin-top: auto;
   color: var(--white);
   background: rgba(255, 255, 255, 0.16);
   border: 2px solid rgba(255, 255, 255, 0.42);
@@ -323,6 +322,14 @@ h1 {
   font-weight: 950;
 }
 
+.bingo-cell small {
+  margin-top: 5px;
+  color: rgba(20, 48, 31, 0.72);
+  font-size: clamp(0.66rem, 3.1vw, 0.82rem);
+  font-weight: 950;
+  line-height: 1;
+}
+
 .cell-index {
   position: absolute;
   top: 8px;
@@ -341,6 +348,7 @@ h1 {
 }
 
 .bingo-cell.is-cleared span:last-of-type,
+.bingo-cell.is-cleared small,
 .bingo-cell.is-cleared .cell-index {
   color: rgba(255, 255, 255, 0.78);
 }
@@ -357,6 +365,26 @@ h1 {
   background: var(--yellow-500);
   border-radius: 50%;
   font-size: 1.2rem;
+}
+
+.game-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.bingo-banner {
+  padding: 14px 16px;
+  color: #5a3000;
+  background: linear-gradient(180deg, #fff7a8, var(--yellow-500));
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 0 rgba(126, 82, 0, 0.32), var(--shadow);
+  font-size: clamp(1rem, 4.6vw, 1.18rem);
+  font-weight: 950;
+  line-height: 1.35;
+  text-align: center;
+  animation: bannerPop 260ms ease both;
 }
 
 .modal-backdrop {
@@ -397,47 +425,11 @@ h1 {
   font-weight: 950;
 }
 
-.hit-input-label {
-  display: block;
-  margin-top: 4px;
-  color: var(--green-800);
-  font-size: 0.9rem;
-  font-weight: 950;
-}
-
-.hit-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #ffffff;
-  border: 2px solid rgba(22, 136, 66, 0.2);
-  border-radius: var(--radius-md);
-}
-
-.hit-input-row input {
-  width: 100%;
-  min-height: 50px;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  font-size: 2rem;
-  font-weight: 950;
-  text-align: center;
-}
-
-.hit-input-row span {
-  color: var(--green-650);
-  font-size: 1.1rem;
-  font-weight: 950;
-}
-
 .hit-range {
   min-height: 1.4em;
-  margin: 10px 0 18px;
+  margin: -4px 0 18px;
   color: var(--green-650);
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 900;
 }
 
@@ -542,6 +534,17 @@ h1 {
   from {
     opacity: 0;
     transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bannerPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
   }
   to {
     opacity: 1;
