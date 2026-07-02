@@ -373,6 +373,11 @@ h1 {
   margin-top: auto;
 }
 
+.bingo-banners {
+  display: grid;
+  gap: 8px;
+}
+
 .bingo-banner {
   padding: 14px 16px;
   color: #5a3000;

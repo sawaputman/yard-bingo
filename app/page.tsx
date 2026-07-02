@@ -16,6 +16,7 @@ const RANGE_MIN_RATIO = 0.7;
 const RANGE_MAX_RATIO = 1.2;
 const TARGET_MIN_GAP = 10;
 const HIT_RANGE = 2;
+const MAX_PRIZE_BINGOS = 3;
 const BINGO_LINES = [
   [0, 1, 2],
   [3, 4, 5],
@@ -77,7 +78,7 @@ export default function Home() {
     () => cells.filter((cell) => cell.cleared).length,
     [cells]
   );
-  const latestBingoMessage = announcedLines.length ? getBingoMessage(announcedLines.length) : "";
+  const bingoMessages = announcedLines.map((_, index) => getBingoMessage(index + 1));
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -91,7 +92,7 @@ export default function Home() {
         if (parsed.cells?.length === CELL_COUNT) {
           setBaseYards(parsed.baseYards ?? "");
           setCells(parsed.cells);
-          setAnnouncedLines(parsed.announcedLines ?? []);
+          setAnnouncedLines((parsed.announcedLines ?? []).slice(0, MAX_PRIZE_BINGOS));
           setPhase("game");
         }
       } catch {
@@ -151,7 +152,11 @@ export default function Home() {
     setConfirmCell(null);
 
     if (nextBingos.length) {
-      setAnnouncedLines((current) => [...current, ...nextBingos].slice(0, BINGO_LINES.length));
+      setAnnouncedLines((current) => {
+        if (current.length >= MAX_PRIZE_BINGOS) return current;
+
+        return [...current, ...nextBingos].slice(0, MAX_PRIZE_BINGOS);
+      });
     }
   };
 
@@ -250,9 +255,13 @@ export default function Home() {
           </div>
 
           <div className="game-actions">
-            {latestBingoMessage && (
-              <div className="bingo-banner" role="status" aria-live="polite">
-                {latestBingoMessage}
+            {bingoMessages.length > 0 && (
+              <div className="bingo-banners" role="status" aria-live="polite">
+                {bingoMessages.map((message) => (
+                  <div className="bingo-banner" key={message}>
+                    {message}
+                  </div>
+                ))}
               </div>
             )}
 
