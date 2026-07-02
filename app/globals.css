@@ -397,6 +397,54 @@ h1 {
   font-weight: 950;
 }
 
+.hit-input-label {
+  display: block;
+  margin-top: 4px;
+  color: var(--green-800);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.hit-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 2px solid rgba(22, 136, 66, 0.2);
+  border-radius: var(--radius-md);
+}
+
+.hit-input-row input {
+  width: 100%;
+  min-height: 50px;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  font-size: 2rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.hit-input-row span {
+  color: var(--green-650);
+  font-size: 1.1rem;
+  font-weight: 950;
+}
+
+.hit-range {
+  min-height: 1.4em;
+  margin: 10px 0 18px;
+  color: var(--green-650);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.hit-range.is-error {
+  color: #b55300;
+}
+
 .dialog-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

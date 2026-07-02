@@ -16,6 +16,11 @@ type BingoResult = {
 } | null;
 
 const STORAGE_KEY = "yard-bingo-state";
+const CELL_COUNT = 9;
+const RANGE_MIN_RATIO = 0.7;
+const RANGE_MAX_RATIO = 1.2;
+const TARGET_MIN_GAP = 10;
+const HIT_RANGE = 2;
 const BINGO_LINES = [
   [0, 1, 2],
   [3, 4, 5],
@@ -32,14 +37,14 @@ function shuffle<T>(items: T[]) {
 }
 
 function generateTargets(baseYards: number) {
-  const min = Math.ceil(baseYards * 0.8);
-  const max = Math.floor(baseYards * 1.2);
+  const min = Math.ceil(baseYards * RANGE_MIN_RATIO);
+  const max = Math.floor(baseYards * RANGE_MAX_RATIO);
   const span = max - min;
-  const gap = Math.min(10, Math.max(1, Math.floor(span / 8)));
+  const gap = Math.min(TARGET_MIN_GAP, Math.max(1, Math.floor(span / (CELL_COUNT - 1))));
   const values: number[] = [];
   let attempts = 0;
 
-  while (values.length < 9 && attempts < 5000) {
+  while (values.length < CELL_COUNT && attempts < 5000) {
     attempts += 1;
     const candidate = Math.floor(Math.random() * (max - min + 1)) + min;
     const farEnough = values.every((value) => Math.abs(value - candidate) >= gap);
@@ -49,15 +54,19 @@ function generateTargets(baseYards: number) {
     }
   }
 
-  if (values.length < 9) {
-    for (let value = min; value <= max && values.length < 9; value += gap) {
+  if (values.length < CELL_COUNT) {
+    for (let value = min; value <= max && values.length < CELL_COUNT; value += gap) {
       if (values.every((target) => Math.abs(target - value) >= gap)) {
         values.push(value);
       }
     }
   }
 
-  return shuffle(values).slice(0, 9);
+  return shuffle(values).slice(0, CELL_COUNT);
+}
+
+function isWithinHitRange(targetYards: number, actualYards: number) {
+  return Math.abs(targetYards - actualYards) <= HIT_RANGE;
 }
 
 function getPrize(line: number[]) {
@@ -91,9 +100,11 @@ export default function Home() {
   const [baseYards, setBaseYards] = useState("");
   const [cells, setCells] = useState<Cell[]>([]);
   const [confirmCell, setConfirmCell] = useState<Cell | null>(null);
+  const [actualYards, setActualYards] = useState("");
   const [bingo, setBingo] = useState<BingoResult>(null);
   const [announcedLines, setAnnouncedLines] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [hitError, setHitError] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const clearedCount = useMemo(
@@ -110,7 +121,7 @@ export default function Home() {
           cells: Cell[];
           announcedLines: string[];
         };
-        if (parsed.cells?.length === 9) {
+        if (parsed.cells?.length === CELL_COUNT) {
           setBaseYards(parsed.baseYards ?? "");
           setCells(parsed.cells);
           setAnnouncedLines(parsed.announcedLines ?? []);
@@ -126,7 +137,7 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoaded) return;
 
-    if (cells.length === 9) {
+    if (cells.length === CELL_COUNT) {
       window.localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({ baseYards, cells, announcedLines })
@@ -165,6 +176,18 @@ export default function Home() {
   const clearCell = () => {
     if (!confirmCell) return;
 
+    const actual = Number(actualYards);
+
+    if (!Number.isFinite(actual) || actual <= 0) {
+      setHitError("実際に飛んだヤードを入力してください");
+      return;
+    }
+
+    if (!isWithinHitRange(confirmCell.yards, actual)) {
+      setHitError(`${confirmCell.yards - HIT_RANGE}〜${confirmCell.yards + HIT_RANGE}yd ならクリアです`);
+      return;
+    }
+
     const nextCells = cells.map((cell) =>
       cell.id === confirmCell.id ? { ...cell, cleared: true } : cell
     );
@@ -172,6 +195,8 @@ export default function Home() {
 
     setCells(nextCells);
     setConfirmCell(null);
+    setActualYards("");
+    setHitError("");
 
     if (nextBingo) {
       setAnnouncedLines((current) => [...current, nextBingo.line.join("-")]);
@@ -184,9 +209,11 @@ export default function Home() {
     setBaseYards("");
     setCells([]);
     setConfirmCell(null);
+    setActualYards("");
     setBingo(null);
     setAnnouncedLines([]);
     setError("");
+    setHitError("");
     window.localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -247,7 +274,12 @@ export default function Home() {
                 className={`bingo-cell ${cell.cleared ? "is-cleared" : ""}`}
                 key={cell.id}
                 type="button"
-                onClick={() => !cell.cleared && setConfirmCell(cell)}
+                onClick={() => {
+                  if (cell.cleared) return;
+                  setConfirmCell(cell);
+                  setActualYards("");
+                  setHitError("");
+                }}
                 aria-pressed={cell.cleared}
               >
                 <span className="cell-index">{index + 1}</span>
@@ -266,19 +298,56 @@ export default function Home() {
 
       {confirmCell && (
         <div className="modal-backdrop" role="presentation">
-          <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+          <form
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              clearCell();
+            }}
+          >
             <p className="dialog-kicker">Nice shot?</p>
             <h3 id="confirm-title">このマスをクリアにしますか？</h3>
             <p className="target-yards">{confirmCell.yards} yd</p>
+            <label className="hit-input-label" htmlFor="actual-yards">
+              実際のヤード
+            </label>
+            <div className="hit-input-row">
+              <input
+                id="actual-yards"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder={`${confirmCell.yards}`}
+                value={actualYards}
+                onChange={(event) => {
+                  setActualYards(event.target.value.replace(/\D/g, ""));
+                  setHitError("");
+                }}
+              />
+              <span>yd</span>
+            </div>
+            <p className={`hit-range ${hitError ? "is-error" : ""}`}>
+              {hitError || `判定範囲: ${confirmCell.yards - HIT_RANGE}〜${confirmCell.yards + HIT_RANGE}yd`}
+            </p>
             <div className="dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => setConfirmCell(null)}>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setConfirmCell(null);
+                  setActualYards("");
+                  setHitError("");
+                }}
+              >
                 キャンセル
               </button>
-              <button className="confirm-button" type="button" onClick={clearCell}>
+              <button className="confirm-button" type="submit">
                 クリア
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
