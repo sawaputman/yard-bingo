@@ -36,68 +36,32 @@ function generateTargets(baseYards: number) {
   const max = Math.floor(baseYards * RANGE_MAX_RATIO);
   const span = max - min;
   const gap = Math.min(TARGET_MIN_GAP, Math.max(1, Math.floor(span / (CELL_COUNT - 1))));
-  const values: number[] = [];
-  let attempts = 0;
+  const maxStart = max - gap * (CELL_COUNT - 1);
+  const start = Math.floor(Math.random() * (maxStart - min + 1)) + min;
 
-  while (values.length < CELL_COUNT && attempts < 5000) {
-    attempts += 1;
-    const candidate = Math.floor(Math.random() * (max - min + 1)) + min;
-    const farEnough = values.every((value) => Math.abs(value - candidate) >= gap);
-
-    if (farEnough) {
-      values.push(candidate);
-    }
-  }
-
-  if (values.length < CELL_COUNT) {
-    for (let value = min; value <= max && values.length < CELL_COUNT; value += gap) {
-      if (values.every((target) => Math.abs(target - value) >= gap)) {
-        values.push(value);
-      }
-    }
-  }
-
-  return shuffle(values).slice(0, CELL_COUNT);
+  return shuffle(Array.from({ length: CELL_COUNT }, (_, index) => start + index * gap));
 }
 
-function getPrize(line: number[]) {
-  const horizontalIndex = BINGO_LINES.findIndex(
-    (candidateLine) => candidateLine.join(",") === line.join(",")
-  );
-
-  if (horizontalIndex === 0) return "ドリンク代免除！";
-  if (horizontalIndex === 1) return "ゴルフ場代免除！";
-  if (horizontalIndex === 2) return "飲み代免除！";
+function getPrize(bingoCount: number) {
+  if (bingoCount === 1) return "ドリンク代免除！";
+  if (bingoCount === 2) return "ゴルフ場代免除！";
+  if (bingoCount === 3) return "飲み代免除！";
   return "特別賞！";
 }
 
-function getLineLabel(line: number[]) {
-  const horizontalIndex = BINGO_LINES.findIndex(
-    (candidateLine) => candidateLine.join(",") === line.join(",")
+function getBingoMessage(bingoCount: number) {
+  return `${bingoCount}回目のビンゴ達成！${getPrize(bingoCount)}`;
+}
+
+function getCompletedLineKeys(cells: Cell[]) {
+  return BINGO_LINES.filter((line) => line.every((index) => cells[index]?.cleared)).map((line) =>
+    line.join("-")
   );
-
-  if (horizontalIndex === 0) return "一列目";
-  if (horizontalIndex === 1) return "二列目";
-  if (horizontalIndex === 2) return "三列目";
-  return "";
 }
 
-function getBingoMessage(lineKey: string) {
-  const line = lineKey.split("-").map(Number);
-  const label = getLineLabel(line);
-  return label ? `${label}のビンゴ達成！${getPrize(line)}` : `ビンゴ達成！${getPrize(line)}`;
-}
-
-function findBingo(cells: Cell[], announcedLines: string[]) {
+function findNewBingos(cells: Cell[], announcedLines: string[]) {
   const announced = new Set(announcedLines);
-  const completedLine = BINGO_LINES.find((line) => {
-    const key = line.join("-");
-    return !announced.has(key) && line.every((index) => cells[index]?.cleared);
-  });
-
-  if (!completedLine) return null;
-
-  return completedLine;
+  return getCompletedLineKeys(cells).filter((lineKey) => !announced.has(lineKey));
 }
 
 export default function Home() {
@@ -113,9 +77,7 @@ export default function Home() {
     () => cells.filter((cell) => cell.cleared).length,
     [cells]
   );
-  const latestBingoMessage = announcedLines.at(-1)
-    ? getBingoMessage(announcedLines.at(-1) as string)
-    : "";
+  const latestBingoMessage = announcedLines.length ? getBingoMessage(announcedLines.length) : "";
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -183,14 +145,27 @@ export default function Home() {
     const nextCells = cells.map((cell) =>
       cell.id === confirmCell.id ? { ...cell, cleared: true } : cell
     );
-    const nextBingo = findBingo(nextCells, announcedLines);
+    const nextBingos = findNewBingos(nextCells, announcedLines);
 
     setCells(nextCells);
     setConfirmCell(null);
 
-    if (nextBingo) {
-      setAnnouncedLines((current) => [...current, nextBingo.join("-")]);
+    if (nextBingos.length) {
+      setAnnouncedLines((current) => [...current, ...nextBingos].slice(0, BINGO_LINES.length));
     }
+  };
+
+  const undoClearCell = () => {
+    if (!confirmCell) return;
+
+    const nextCells = cells.map((cell) =>
+      cell.id === confirmCell.id ? { ...cell, cleared: false } : cell
+    );
+    const stillCompleted = new Set(getCompletedLineKeys(nextCells));
+
+    setCells(nextCells);
+    setConfirmCell(null);
+    setAnnouncedLines((current) => current.filter((lineKey) => stillCompleted.has(lineKey)));
   };
 
   const resetGame = () => {
@@ -261,7 +236,6 @@ export default function Home() {
                 key={cell.id}
                 type="button"
                 onClick={() => {
-                  if (cell.cleared) return;
                   setConfirmCell(cell);
                 }}
                 aria-pressed={cell.cleared}
@@ -298,7 +272,9 @@ export default function Home() {
             aria-labelledby="confirm-title"
           >
             <p className="dialog-kicker">Nice shot?</p>
-            <h3 id="confirm-title">このマスをクリアにしますか？</h3>
+            <h3 id="confirm-title">
+              {confirmCell.cleared ? "このマスのクリアを戻しますか？" : "このマスをクリアにしますか？"}
+            </h3>
             <p className="target-yards">{confirmCell.yards} yd</p>
             <p className="hit-range">
               クリア範囲: {confirmCell.yards - HIT_RANGE}〜{confirmCell.yards + HIT_RANGE}yd
@@ -313,8 +289,12 @@ export default function Home() {
               >
                 キャンセル
               </button>
-              <button className="confirm-button" type="button" onClick={clearCell}>
-                クリア
+              <button
+                className="confirm-button"
+                type="button"
+                onClick={confirmCell.cleared ? undoClearCell : clearCell}
+              >
+                {confirmCell.cleared ? "戻す" : "クリア"}
               </button>
             </div>
           </div>
